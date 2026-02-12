@@ -1,0 +1,14 @@
+#!/bin/bash
+# Make an ERC-8128 signed HTTP request with automatic x402 payment handling
+# Usage: signed-fetch <url> [method] [body]
+# Examples:
+#   signed-fetch https://api.example.com/data
+#   signed-fetch https://api.example.com/submit POST '{"key":"value"}'
+URL="$1"
+METHOD="${2:-GET}"
+BODY="$3"
+if [ -z "$URL" ]; then echo '{"error":"Usage: signed-fetch <url> [method] [body]"}'; exit 1; fi
+PAYLOAD="{\"url\":\"$URL\",\"method\":\"$METHOD\""
+if [ -n "$BODY" ]; then PAYLOAD="$PAYLOAD,\"body\":$BODY"; fi
+PAYLOAD="$PAYLOAD}"
+curl -sf -X POST http://127.0.0.1:8128/fetch -H 'Content-Type: application/json' -d "$PAYLOAD" 2>/dev/null || echo '{"error":"signing proxy not running"}'

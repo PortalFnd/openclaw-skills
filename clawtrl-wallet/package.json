@@ -1,0 +1,22 @@
+{
+  "name": "clawtrl-wallet",
+  "version": "1.0.0",
+  "description": "Crypto wallet on Base with ERC-8128 signing, x402 autonomous payments, and transfers",
+  "type": "module",
+  "dependencies": {
+    "viem": "^2.0.0",
+    "x402-fetch": "latest",
+    "@x402/fetch": "latest",
+    "@x402/evm": "latest"
+  },
+  "scripts": {
+    "start": "node src/signing-proxy.js"
+  },
+  "author": "Clawtrl",
+  "license": "MIT",
+  "homepage": "https://clawtrl.com/skills",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PortalFnd/openclaw-skills"
+  }
+}

@@ -1,0 +1,14 @@
+[Unit]
+Description=Clawtrl ERC-8128 Signing Proxy
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/clawtrl/signing-proxy
+ExecStart=/usr/bin/node /opt/clawtrl/signing-proxy/src/signing-proxy.js
+Restart=always
+RestartSec=5
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

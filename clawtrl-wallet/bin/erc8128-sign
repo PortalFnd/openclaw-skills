@@ -1,0 +1,11 @@
+#!/bin/bash
+# Sign an HTTP request with ERC-8128 and return the signature headers
+# Usage: erc8128-sign <url> [method] [body]
+URL="$1"
+METHOD="${2:-GET}"
+BODY="$3"
+if [ -z "$URL" ]; then echo '{"error":"Usage: erc8128-sign <url> [method] [body]"}'; exit 1; fi
+PAYLOAD="{\"url\":\"$URL\",\"method\":\"$METHOD\""
+if [ -n "$BODY" ]; then PAYLOAD="$PAYLOAD,\"body\":$BODY"; fi
+PAYLOAD="$PAYLOAD}"
+curl -sf -X POST http://127.0.0.1:8128/sign -H 'Content-Type: application/json' -d "$PAYLOAD" 2>/dev/null || echo '{"error":"signing proxy not running"}'

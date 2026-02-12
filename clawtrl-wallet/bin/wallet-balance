@@ -1,0 +1,3 @@
+#!/bin/bash
+# Check agent wallet balances (ETH and USDC on Base)
+curl -sf http://127.0.0.1:8128/balance 2>/dev/null || echo '{"error":"signing proxy not running"}'
