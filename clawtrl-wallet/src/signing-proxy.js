@@ -1,19 +1,60 @@
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
+import { homedir } from 'node:os';
 import { privateKeyToAccount } from 'viem/accounts';
 import { createWalletClient, createPublicClient, http, parseUnits, encodeFunctionData } from 'viem';
 import { base } from 'viem/chains';
-import { wrapFetchWithPayment } from 'x402-fetch';
+
+// Polyfill global fetch (required by @x402/fetch, may be missing in some Node builds)
+if (typeof globalThis.fetch === 'undefined') {
+  try {
+    var _undici = await import('undici');
+    globalThis.fetch = _undici.fetch;
+    globalThis.Headers = _undici.Headers;
+    globalThis.Request = _undici.Request;
+    globalThis.Response = _undici.Response;
+    console.log('Polyfilled global fetch via undici');
+  } catch(_e) {
+    console.error('WARNING: global fetch not available — x402 payments will not work');
+  }
+}
+
+// x402 v2 SDK — matches official coinbase/x402 example
+var x402Loaded = false;
+var x402WrapFetch = null;
+var x402ClientInstance = null;
+try {
+  var fetchMod = await import('@x402/fetch');
+  var evmMod = await import('@x402/evm/exact/client');
+  x402WrapFetch = fetchMod.wrapFetchWithPayment;
+  var X402Client = fetchMod.x402Client;
+  x402ClientInstance = new X402Client();
+  // Will register signer after account is created (below)
+  console.log('@x402/fetch + @x402/evm loaded (v2)');
+  x402Loaded = true;
+} catch(_e) {
+  console.log('x402 v2 SDK not available: ' + _e.message);
+  // Try v1 fallback (x402-fetch)
+  try {
+    var v1mod = await import('x402-fetch');
+    x402WrapFetch = v1mod.wrapFetchWithPayment;
+    console.log('x402-fetch v1 SDK loaded (fallback)');
+    x402Loaded = true;
+  } catch(_e2) {
+    console.log('x402-fetch v1 also not available: ' + _e2.message);
+  }
+}
 
 var USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-var x402v2Fetch = null;
 
 function loadEnv(path) {
   try {
     var content = readFileSync(path, 'utf-8');
     var vars = {};
     content.split('\n').forEach(function(line) {
+      line = line.trim();
+      if (!line || line.startsWith('#')) return;
       var idx = line.indexOf('=');
       if (idx > 0) vars[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
     });
@@ -21,13 +62,16 @@ function loadEnv(path) {
   } catch(e) { return {}; }
 }
 
-// Try multiple env file locations
+// Try multiple env file locations (root + non-root installs)
+var HOME = homedir();
 var env = loadEnv('/opt/openclaw/.env');
+if (!env.AGENT_WALLET_PRIVATE_KEY) env = loadEnv(HOME + '/.clawtrl/.env');
+if (!env.AGENT_WALLET_PRIVATE_KEY) env = loadEnv(HOME + '/.env');
 if (!env.AGENT_WALLET_PRIVATE_KEY) env = loadEnv('.env');
 var pk = env.AGENT_WALLET_PRIVATE_KEY || process.env.AGENT_WALLET_PRIVATE_KEY;
 if (!pk || !pk.startsWith('0x')) {
   console.error('AGENT_WALLET_PRIVATE_KEY not found or invalid');
-  console.error('Set it in /opt/openclaw/.env, .env, or as an environment variable');
+  console.error('Searched: /opt/openclaw/.env, ~/.clawtrl/.env, ~/.env, .env, $AGENT_WALLET_PRIVATE_KEY');
   process.exit(1);
 }
 
@@ -43,23 +87,25 @@ var publicClient = createPublicClient({
   transport: http('https://mainnet.base.org'),
 });
 
-// x402 v1: EIP-3009 transferWithAuthorization (Portal Foundation, etc)
-var x402Fetch = wrapFetchWithPayment(walletClient);
-
-// x402 v2: Permit2 (loaded dynamically — optional, graceful fallback)
-(async function() {
+// Initialize x402 payment-wrapped fetch
+var x402Fetch = null;
+if (x402Loaded && x402WrapFetch) {
   try {
-    var mod1 = await import('@x402/fetch');
-    var mod2;
-    try { mod2 = await import('@x402/evm'); } catch(e) { mod2 = await import('@x402/evm/exact/client'); }
-    var client = new mod1.x402Client();
-    mod2.registerExactEvmScheme(client, { signer: account });
-    x402v2Fetch = mod1.wrapFetchWithPaymentFromConfig(client);
-    console.log('x402 v2 SDK loaded (Permit2 support)');
+    if (x402ClientInstance) {
+      // v2: register EVM signer on x402Client, then wrap fetch
+      var evmMod = await import('@x402/evm/exact/client');
+      evmMod.registerExactEvmScheme(x402ClientInstance, { signer: account });
+      x402Fetch = x402WrapFetch(globalThis.fetch, x402ClientInstance);
+      console.log('x402 v2 payment fetch ready (scheme: exact, network: base)');
+    } else {
+      // v1 fallback: wrapFetchWithPayment(fetch, walletClient)
+      x402Fetch = x402WrapFetch(globalThis.fetch, walletClient);
+      console.log('x402 v1 payment fetch ready');
+    }
   } catch(e) {
-    console.log('x402 v2 not available, using v1 only: ' + e.message);
+    console.log('Failed to init x402 fetch: ' + e.message);
   }
-})();
+}
 
 // ERC-8128: sign an HTTP request with the agent wallet
 async function erc8128Sign(url, method, body) {
@@ -156,20 +202,28 @@ async function handler(req, res) {
       Object.assign(headers, sigHeaders);
       var init = { method: method, headers: headers };
       if (body.body) init.body = body.body;
-      // x402 v1 (EIP-3009) — handles most x402 servers
-      var response = await x402Fetch(body.url, init);
-      // If still 402 and v2 SDK loaded, try v2 (Permit2)
-      if (response.status === 402 && x402v2Fetch) {
-        console.log('x402 v1 did not resolve 402, trying v2...');
-        var init2 = { method: method, headers: Object.assign({}, headers) };
-        if (body.body) init2.body = body.body;
-        response = await x402v2Fetch(body.url, init2);
+
+      var response;
+      if (x402Fetch) {
+        // x402 payment — auto-handles 402 responses
+        console.log('fetch via x402: ' + method + ' ' + body.url);
+        response = await x402Fetch(body.url, init);
+      } else if (typeof globalThis.fetch === 'function') {
+        // Fallback: plain fetch (no x402 payment handling)
+        console.log('fetch (no x402): ' + method + ' ' + body.url);
+        response = await globalThis.fetch(body.url, init);
+      } else {
+        return jsonRes(res, 500, { error: 'No fetch implementation available. Ensure Node 18+ is installed.' });
       }
+
       var respBody = await response.text();
       var respHdrs = {};
       response.headers.forEach(function(v, k) { respHdrs[k] = v; });
       return jsonRes(res, 200, { status: response.status, headers: respHdrs, body: respBody });
-    } catch(e) { return jsonRes(res, 500, { error: e.message }); }
+    } catch(e) {
+      console.error('/fetch error:', e.message);
+      return jsonRes(res, 500, { error: e.message });
+    }
   }
 
   jsonRes(res, 404, { error: 'not found' });

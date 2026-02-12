@@ -4,8 +4,7 @@
   "description": "Crypto wallet on Base with ERC-8128 signing, x402 autonomous payments, and transfers",
   "type": "module",
   "dependencies": {
-    "viem": "^2.0.0",
-    "x402-fetch": "latest",
+    "viem": "^2.39.0",
     "@x402/fetch": "latest",
     "@x402/evm": "latest"
   },
