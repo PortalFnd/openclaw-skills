@@ -1,0 +1,29 @@
+{
+  "name": "clawtrl-wallet",
+  "version": "1.0.0",
+  "description": "Crypto wallet for AI agents — ERC-8128 signing, x402 payments, transfers on Base",
+  "bin": {
+    "clawtrl-wallet": "./cli.js"
+  },
+  "keywords": [
+    "ai-agent",
+    "wallet",
+    "erc-8128",
+    "x402",
+    "base",
+    "ethereum",
+    "signing-proxy",
+    "openclaw",
+    "clawtrl"
+  ],
+  "author": "Clawtrl",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PortalFnd/openclaw-skills"
+  },
+  "homepage": "https://clawtrl.com/skills",
+  "engines": {
+    "node": ">=18"
+  }
+}
