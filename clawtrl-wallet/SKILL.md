@@ -75,16 +75,15 @@ clawtrl-wallet/
 
 ## Install
 
-### Option 1: ClawHub (recommended)
-```
-clawhub install clawtrl-wallet
+### Option 1: One-liner (recommended)
+```bash
+curl -sSL https://raw.githubusercontent.com/PortalFnd/openclaw-skills/main/clawtrl-wallet/install.sh | sudo bash
 ```
 
-### Option 2: Manual
+### Option 2: Clone and install
 ```bash
 git clone https://github.com/PortalFnd/openclaw-skills.git
 cd openclaw-skills/clawtrl-wallet
-chmod +x install.sh
 sudo ./install.sh
 ```
 
